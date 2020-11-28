@@ -304,22 +304,27 @@ bool CFindFile::FindFirst(CFSTR cfWildcard, CFileInfo &fi, bool ignoreLink)
     return false;
   }
  
-  my_windows_split_path(nameWindowToUnix(wildcard),_directory,_pattern);
-  
+  const char * path = nameWindowToUnix(wildcard);
+  my_windows_split_path(path,_directory,_pattern);
+
   TRACEN((printf("CFindFile::FindFirst : %s (dirname=%s,pattern=%s)\n",wildcard,(const char *)_directory,(const char *)_pattern)))
 
-  _dirp = ::opendir((const char *)_directory);
-  TRACEN((printf("CFindFile::FindFirst : opendir=%p\n",_dirp)))
+  // check if pattern contains * or ? to see if we can skip the pattern checking
+  bool hasNoWildcards = (_pattern.Find('*') == -1 && _pattern.Find('?') == -1);
+  if (hasNoWildcards) {
+      bool fileExists = ( access( path, F_OK ) != -1 );
 
-  if ((_dirp == 0) && (global_use_utf16_conversion)) {
-    // Try to recover the original filename
-    UString ustr = MultiByteToUnicodeString(_directory, 0);
-    AString resultString;
-    bool is_good = originalFilename(ustr, resultString);
-    if (is_good) {
-      _dirp = ::opendir((const char *)resultString);
-      _directory = resultString;
-    }
+      if (fileExists) {
+        int retf = fillin_CFileInfo(fi,(const char *)_directory,(const char *)_pattern,ignoreLink);
+        if (retf == 0) {
+            return true;
+        } else {
+          SetLastError( ERROR_PATH_NOT_FOUND );
+          return false;
+        }
+      } else {
+        return false;
+      }
   }
 
   if (_dirp == 0) return false;
